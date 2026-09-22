@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { getStoredAuth } from '@/app/lib/api'
 
-const publicRoutes = new Set(['/login', '/signup'])
+const publicRoutes = new Set(['/login', '/signup', '/auth/callback'])
 
 export default function AuthGate({ children }) {
   const pathname = usePathname()
