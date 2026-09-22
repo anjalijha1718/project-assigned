@@ -1,15 +1,15 @@
+const path = require('path');
+const dotenv = require('dotenv');
+dotenv.config({ path: path.resolve(__dirname, '.env') });
+
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
-const path = require('path');
 const cookieParser = require('cookie-parser');
 const connectDB = require('./src/config/db');
 const authRoutes = require('./src/routes/authRoutes');
 const inquiryRoutes = require('./src/routes/inquiryRoutes');
 const adminRoutes = require('./src/routes/adminRoutes');
 const projectRoutes = require('./src/routes/projectRoutes');
-
-dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -57,4 +57,8 @@ const startServer = async () => {
   }
 };
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = app;

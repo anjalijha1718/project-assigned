@@ -1,255 +1,338 @@
 # Silent House
 
-## Project overview
-This repository preserves the original Silent House marketing website while adding a working Node.js + Express API, MongoDB persistence, JWT authentication, and admin inquiry management. The frontend remains a Next.js application, and the existing homepage design, content, images, and motion behavior are left intact as the primary user experience.
+## Project Overview
+This repository preserves the original Silent House marketing website while integrating a robust Node.js + Express backend, MongoDB persistence, JWT authentication, **Email OTP verification during signup**, **Google OAuth 2.0 authentication ("Continue with Google")**, **Admin Inquiry Management**, and **Admin User Management**.
 
-## Original Silent House functionality preserved
-The original website remains visually and content-wise intact, including:
-- the homepage layout and copy
-- the navigation structure and labels
-- the hero, featured work, divisions, press, and types-of-work sections
-- the existing styling system and GSAP/Lenis-based motion behavior
-- the branded footer and links
-- existing media references and site structure
+The frontend remains a modern Next.js application, preserving the original homepage layout, branding, typography, images, videos, Lenis smooth scrolling, and GSAP motion behaviors without any regressions.
 
-## New functionality added
-- user signup and login pages
-- protected dashboard for authenticated users
-- admin-only inquiry management panel
-- MongoDB-backed inquiry submission and tracking
-- JWT-based authentication with bcrypt password hashing
-- seed data for testing users, admin user, inquiry records, and example content
-- real frontend-to-backend API integration
+---
 
-## Frontend technology
-- Next.js 16
-- React 19
-- JavaScript
-- CSS with Tailwind utility integration kept compatible with the existing design
+## Original Silent House Functionality Preserved
+The original website remains visually and functionally intact, including:
+- Homepage layout, hero typography, and copy
+- Navigation bar, logo icon, and interactive modals (Work, Studios, Productions, Touring, About, Reel, Let's talk)
+- Hero, Featured Work, Divisions, Press, and Types of Work sections
+- GSAP and Lenis smooth scrolling motion behavior
+- Header color adaptation when scrolling over light/dark sections
+- Branded footer, contact drawer, and asset paths
 
-## Backend technology
-- Node.js
-- Express.js
-- MongoDB
-- Mongoose
-- JWT
-- bcryptjs
-- dotenv
-- CORS
+---
 
-## MongoDB setup
-MongoDB should run locally on your Windows machine. The backend is configured to connect to:
+## Features Added
 
-```bash
-mongodb://127.0.0.1:27017/silent_house
-```
+### 1. Email OTP Verification During Signup (Feature 1)
+- User enters details (Name, Email, Password, Confirm Password).
+- Account is **NOT** created until the email is verified via a 6-digit OTP.
+- OTP is sent using **Resend** (free-tier transactional email API).
+- Temporary registration data is held in a dedicated `OtpVerification` collection with:
+  - Bcrypt-hashed password (plaintext is never stored).
+  - Bcrypt-hashed OTP (plaintext is never stored).
+  - 10-minute expiration with MongoDB TTL auto-cleanup.
+  - Attempt counter (invalidated after 5 failed attempts).
+  - 60-second cooldown timer between resend requests.
+- **Local Dev Fallback**: If `RESEND_API_KEY` is not yet configured, the OTP is printed directly to the terminal console (`[EMAIL SERVICE DEV SIMULATION]`) so development is never blocked.
 
-You can start MongoDB locally using the standard MongoDB service command on your system or the installed `mongod` binary if available.
+### 2. Google OAuth 2.0 Signup (Feature 2)
+- "Continue with Google" button on the signup page.
+- Direct integration with Google Cloud OAuth 2.0 / OpenID Connect endpoints.
+- Verifies identity, retrieves verified email, and checks MongoDB:
+  - Creates user with **strictly `role: 'user'`** and `emailVerified: true`.
+  - Links Google identity (`googleId`) to existing accounts if present.
+  - Prevents privilege escalation (cannot create admin accounts through OAuth).
+- Issues session JWT and seamlessly redirects into the application.
 
-## Architecture
-The app is structured as a monorepo-style project with a Next.js frontend and a separate Express backend.
+### 3. Admin User Management Panel (`/manage`)
+- Accessible from the navbar profile menu for authenticated administrators.
+- Authoritative backend authorization check (`/api/auth/me`).
+- Lists all registered users with name, email, role, and registration date.
+- Modal to create new user or administrator accounts with validation.
+- Modal to delete users with protection preventing deletion of your own account or the last remaining administrator.
+
+### 4. Admin Inquiry Management Panel (`/admin`)
+- Lists inquiries submitted through the contact modal/page.
+- Filter and update inquiry statuses (`pending`, `contacted`, `completed`).
+- Delete obsolete inquiry submissions.
+
+### 5. Authentication & Session Architecture
+- JWT tokens with 7-day expiration.
+- Dual storage: HTTP-only cookie + `localStorage` via client-side `AuthGate`.
+- Bcrypt password hashing (10 salt rounds).
+- Protected user dashboard (`/dashboard`).
+- Safe logout clearing both client storage and auth cookies.
+
+---
+
+## Technology Stack
+
+### Frontend
+- **Framework**: Next.js 16 (App Router)
+- **UI Library**: React 19
+- **Styling**: Tailwind CSS + Custom CSS (`globals.css`)
+- **Animations**: GSAP 3 + Lenis Smooth Scroll
+
+### Backend
+- **Runtime**: Node.js (v18+)
+- **Server Framework**: Express 4
+- **Database**: MongoDB + Mongoose 8
+- **Authentication**: JSON Web Tokens (`jsonwebtoken`) + `bcryptjs`
+- **Email Provider**: Resend (`resend`)
+- **OAuth**: Google OAuth 2.0 / OpenID Connect
+
+---
+
+## Architecture Diagram
 
 ```mermaid
-flowchart LR
-    User --> NextApp[Next.js frontend]
-    NextApp --> API[Express API]
-    API --> Mongo[(MongoDB)]
-    API --> Auth[JWT Auth]
-    Admin[Admin user] --> NextApp
-    Inquiry[Contact form] --> API
+flowchart TD
+    User([User / Browser])
+    NextApp[Next.js Frontend\nPort 3000]
+    API[Express Backend API\nPort 5000]
+    Mongo[(MongoDB\nLocal Port 27017)]
+    Resend[Resend Email API\nFree Tier]
+    Google[Google OAuth 2.0\nIdentity Services]
+
+    User <-->|Next Pages & UI| NextApp
+    NextApp <-->|REST API / JWT| API
+    API <-->|Mongoose ODM| Mongo
+    API -->|Send 6-Digit OTP| Resend
+    Resend -.->|Deliver Email| User
+    User <-->|OAuth Consent| Google
+    Google -->|Auth Code| API
 ```
 
-## Folder structure
+---
+
+## Folder Structure
+
 ```text
 silent-house/
 ├── app/
-│   ├── admin/
-│   ├── components/
-│   ├── contact/
-│   ├── dashboard/
-│   ├── login/
-│   ├── signup/
+│   ├── admin/               # Admin inquiries dashboard
+│   ├── auth/
+│   │   └── callback/        # Google OAuth callback handler page
+│   ├── components/          # Header, Footer, AuthGate, Hero, Modals, etc.
+│   ├── contact/             # Contact inquiry submission page
+│   ├── dashboard/           # Authenticated user dashboard
+│   ├── home/                # Authenticated landing page
 │   ├── lib/
-│   ├── globals.css
-│   ├── layout.js
-│   └── page.js
+│   │   └── api.js           # Frontend API client and auth storage
+│   ├── login/               # Existing login page
+│   ├── manage/              # Admin user management panel
+│   ├── signup/              # Signup page with OTP verification & Google button
+│   ├── globals.css          # Design system, themes, and auth styles
+│   ├── layout.js            # Root layout wrapped in AuthGate
+│   └── page.js              # Original homepage
 ├── backend/
 │   ├── scripts/
+│   │   ├── seed.js          # Database seeder (users, inquiries, projects)
+│   │   └── test-features.js # Automated E2E verification test suite
 │   ├── src/
+│   │   ├── config/
+│   │   │   └── db.js        # MongoDB connection handler
+│   │   ├── middleware/
+│   │   │   └── auth.js      # protect and adminOnly JWT middleware
+│   │   ├── models/
+│   │   │   ├── Inquiry.js   # Inquiry model
+│   │   │   ├── OtpVerification.js # Temporary OTP verification model with TTL
+│   │   │   ├── Project.js   # Portfolio project model
+│   │   │   └── User.js      # User model (roles, authProvider, emailVerified)
+│   │   ├── routes/
+│   │   │   ├── adminRoutes.js   # Admin inquiries and user management routes
+│   │   │   ├── authRoutes.js    # Auth, OTP, and Google OAuth endpoints
+│   │   │   ├── inquiryRoutes.js # Public inquiry submission
+│   │   │   └── projectRoutes.js # Project data endpoints
+│   │   └── services/
+│   │       └── emailService.js  # Resend transactional email integration
 │   ├── .env.example
 │   ├── package.json
-│   └── server.js
+│   └── server.js            # Express server entry point
 ├── .env.example
-├── jsconfig.json
 ├── next.config.mjs
 ├── package.json
-├── postcss.config.mjs
-├── README.md
-└── public/
+└── README.md
 ```
 
-## Installation steps
-1. Install frontend dependencies:
-   ```bash
-   npm install
-   ```
-2. Install backend dependencies:
-   ```bash
-   cd backend
-   npm install
-   ```
-3. Create environment files:
-   ```bash
-   copy .env.example .env
-   copy backend\.env.example backend\.env
-   ```
-4. Update both `.env` files with your local values if needed.
+---
 
-## Environment variables
-Frontend `.env`:
+## Installation & Setup
+
+### 1. Prerequisites
+- **Node.js**: v18.0.0 or higher
+- **MongoDB**: Community Server running locally on `localhost:27017`
+
+### 2. Install Dependencies
+In the root directory (frontend):
+```powershell
+npm install
+```
+
+In the `backend` directory:
+```powershell
+cd backend
+npm install
+cd ..
+```
+
+### 3. Configure Environment Variables
+
+**Frontend (`.env` in repository root)**:
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:5000/api
 ```
 
-Backend `backend/.env`:
+**Backend (`backend/.env`)**:
 ```env
 MONGODB_URI=mongodb://127.0.0.1:27017/silent_house
 PORT=5000
-JWT_SECRET=change_this_secret_value
+JWT_SECRET=silent-house-dev-secret
 CLIENT_URL=http://localhost:3000
+
+# Free Transactional Email Provider (Resend - https://resend.com)
+# Sign up free for 3,000 emails/month (no credit card required)
+# In development, leave blank to use the terminal console simulation
+RESEND_API_KEY=
+EMAIL_FROM=Silent House <onboarding@resend.dev>
+
+# Google OAuth 2.0 (Google Cloud Console - https://console.cloud.google.com)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_CALLBACK_URL=http://localhost:5000/api/auth/google/callback
 ```
 
-## How to start MongoDB
-On a local Windows machine with MongoDB installed:
+---
 
+## Running the Application
+
+### 1. Start MongoDB
+Ensure the MongoDB service is active on your machine:
 ```powershell
+# If installed as a Windows service:
+net start MongoDB
+
+# Or run the binary manually:
 mongod
 ```
 
-If MongoDB is installed as a service, you can also start the MongoDB service from Windows Services or the MongoDB shell setup.
-
-## How to start backend
-```bash
+### 2. Start the Backend API
+```powershell
 cd backend
 npm run dev
 ```
+*API runs at `http://localhost:5000`*
 
-The backend runs on:
-```text
-http://localhost:5000
-```
-
-## How to start frontend
-```bash
+### 3. Start the Frontend
+In a new terminal window:
+```powershell
 npm run dev
 ```
+*Frontend runs at `http://localhost:3000`*
 
-The frontend runs on:
-```text
-http://localhost:3000
-```
-
-## How to seed MongoDB
-```bash
+### 4. Seed Initial Data (Optional)
+To populate test inquiries, projects, and sample users:
+```powershell
 cd backend
 npm run seed
 ```
 
-This creates:
-- 3 test users
-- 1 admin user
-- multiple inquiry records
-- sample project/content records
+---
 
-## Test credentials
-```text
-User account:
-- email: ava@example.com
-- password: password123
+## Test Credentials
 
-Admin account:
-- email: admin@silent-house.com
-- password: admin123
-```
-
-## API endpoint list
-### Authentication
-- `POST /api/auth/signup`
-- `POST /api/auth/login`
-- `GET /api/auth/me`
-
-### Projects/content
-- `GET /api/projects`
-- `GET /api/projects/:id`
-
-### Inquiries
-- `POST /api/inquiries`
-
-### Admin only
-- `GET /api/admin/inquiries`
-- `PATCH /api/admin/inquiries/:id`
-- `DELETE /api/admin/inquiries/:id`
-
-### Health check
-- `GET /api/health`
-
-## Authentication explanation
-Authentication uses JWTs issued after successful login or signup. The token is stored in the browser local storage and sent in the `Authorization: Bearer <token>` header for protected API requests. The backend validates the JWT and attaches the authenticated user to each protected request. Admin-only routes check the user's role before allowing access.
-
-## Validation and error handling
-The application validates:
-- required fields
-- invalid email formats
-- password length and confirmation mismatch
-- duplicate signups
-- invalid login attempts
-- unauthorized access and missing JWT
-- admin-only API restrictions
-- failed API requests
-- empty states and loading states in the UI
-
-Sensitive details such as raw stack traces, database errors, or secrets are not exposed to the user.
-
-## Security considerations
-- bcrypt password hashing
-- JWT expiry (7 days)
-- environment variables for secrets and API URL
-- CORS enabled for the local frontend
-- protected routes and admin authorization
-- no plaintext password storage
-- `.env` files ignored by git
-
-## Testing instructions
-1. Start MongoDB.
-2. Start backend: `cd backend && npm run dev`
-3. Start frontend: `npm run dev`
-4. Seed database: `cd backend && npm run seed`
-5. Create a new user at `/signup`.
-6. Log in via `/login`.
-7. Visit the dashboard and verify protected access.
-8. Submit an inquiry from `/contact`.
-9. Log in as admin and verify the `/admin` panel.
-10. Update and delete inquiry records.
-11. Run a frontend production build: `npm run build`
-12. Confirm the app starts without runtime errors.
-
-## Known limitations
-- This is a local development implementation and not yet deployed to production.
-- The original homepage remains static marketing content; the dynamic data layer focuses on auth and inquiry workflows.
-- The project content is deliberately lightweight for this assignment and can be expanded further as needed.
-
-## Future improvements
-- add richer project and case-study pages tied to MongoDB records
-- add admin user management and audit logs
-- add email notifications for inquiries
-- add pagination and filtering for admin inquiry lists
-- add automated tests with Jest or Playwright
-
-## AI tools used
-- GitHub Copilot
-- VS Code integrated tooling
-- Next.js and Node.js runtime verification
+| Account Role | Email | Password | Access Level |
+| :--- | :--- | :--- | :--- |
+| **Standard User** | `ava@example.com` | `password123` | Homepage, Dashboard, Contact |
+| **Standard User** | `noah@example.com` | `password123` | Homepage, Dashboard, Contact |
+| **Administrator** | `admin@silent-house.com` | `admin123` | Full Access (`/admin`, `/manage`) |
 
 ---
 
-This documentation reflects the final project state and the commands that were verified in the repository.
+## API Endpoints Reference
+
+### Authentication (`/api/auth`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/send-signup-otp` | Public | Validates signup data, hashes password/OTP, sends 6-digit code |
+| `POST` | `/verify-signup-otp` | Public | Verifies OTP code, creates user account, sets auth session |
+| `POST` | `/resend-signup-otp` | Public | Resends OTP with 60-second cooldown enforcement |
+| `GET` | `/google` | Public | Initiates Google OAuth 2.0 authorization redirect |
+| `GET` | `/google/callback` | Public | Handles OAuth callback, creates/links user, sets session |
+| `POST` | `/signup` | Public | Direct signup endpoint (preserved for backward compatibility) |
+| `POST` | `/login` | Public | Authenticates user with email & password, returns JWT |
+| `GET` | `/me` | User / Admin | Returns current authenticated user profile |
+| `POST` | `/logout` | Authenticated | Clears auth cookie and session |
+
+### Admin User Management (`/api/admin/users`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/` | Admin Only | Lists all registered users (excluding password hashes) |
+| `POST` | `/` | Admin Only | Creates a new user or administrator account |
+| `DELETE` | `/:id` | Admin Only | Deletes user (blocks self-deletion and last admin deletion) |
+
+### Admin Inquiry Management (`/api/admin/inquiries`)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/` | Admin Only | Lists all submitted inquiries sorted by date |
+| `PATCH` | `/:id` | Admin Only | Updates inquiry status (`pending`, `contacted`, `completed`) |
+| `DELETE` | `/:id` | Admin Only | Deletes an inquiry record |
+
+### Public Inquiries & Projects
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/inquiries` | Public | Submits a contact inquiry |
+| `GET` | `/api/projects` | Public | Lists featured portfolio projects |
+| `GET` | `/api/projects/:id` | Public | Retrieves specific project details |
+| `GET` | `/api/health` | Public | Health check endpoint |
+
+---
+
+## Testing & Verification
+
+### Automated Test Suite
+A dedicated verification test suite checks all OTP flows, cooldowns, attempt limits, and regression cases:
+```powershell
+cd backend
+npm test
+```
+
+This automated test executes:
+1. Form validation & missing field rejection (400)
+2. Duplicate email rejection (409)
+3. Secure OTP generation & hashing in MongoDB
+4. Resend rate limiting / 60s cooldown (429)
+5. Invalid OTP attempt tracking (400)
+6. Correct OTP verification & account creation with `role: 'user'` (201)
+7. Login with newly created user
+8. Regression test: existing user login (`ava@example.com`)
+9. Regression test: admin login & user management API (`admin@silent-house.com`)
+10. Google OAuth unconfigured credentials safety redirect
+
+### Production Build Test
+Verify that Next.js compiles without build or TypeScript errors:
+```powershell
+npm run build
+```
+
+---
+
+## Google Cloud OAuth Setup Guide
+
+If you wish to test real Google authentication in development:
+1. Open the [Google Cloud Console](https://console.cloud.google.com).
+2. Create or select a project.
+3. Configure the **OAuth consent screen** (User Type: External, add `openid`, `email`, and `profile` scopes).
+4. Go to **Credentials** > **Create Credentials** > **OAuth client ID** (Application Type: Web application).
+5. Add Authorized redirect URI:
+   ```text
+   http://localhost:5000/api/auth/google/callback
+   ```
+6. Copy the Client ID and Client Secret into `backend/.env`.
+
+---
+
+## Security Features Implemented
+- **Pre-hashed Storage**: Neither passwords nor OTPs are ever stored in plaintext.
+- **MongoDB TTL**: Verification records expire and automatically delete after 10 minutes.
+- **Attempt Limiting**: Max 5 attempts per OTP before the code is permanently invalidated.
+- **Resend Cooldown**: 60-second cooldown enforced between resend requests.
+- **Role Safeguards**: OAuth registration strictly assigns `role: 'user'`. Frontend cannot dictate user role.
+- **Admin Safeguards**: Self-deletion and deletion of the last remaining administrator account are blocked.

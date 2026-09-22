@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import TransparentModal from './TransparentModal'
-import { apiRequest, clearStoredAuth, getStoredAuth } from '@/app/lib/api'
+import { apiRequest, clearStoredAuth, getStoredAuth, setStoredAuth } from '@/app/lib/api'
 
 const navItems = [
   { key: 'work', label: 'Work', description: 'Explore our portfolio and recent collaborations.' },
@@ -50,7 +50,23 @@ export default function Header() {
   const profileRef = useRef(null)
 
   useEffect(() => {
-    setUser(getStoredAuth()?.user || null)
+    const auth = getStoredAuth()
+    if (auth?.token) {
+      setUser(auth.user || null)
+      apiRequest('/auth/me', { method: 'GET', token: auth.token })
+        .then((data) => {
+          if (data?.user) {
+            setUser(data.user)
+            setStoredAuth(auth.token, data.user)
+          }
+        })
+        .catch(() => {
+          clearStoredAuth()
+          setUser(null)
+        })
+    } else {
+      setUser(null)
+    }
 
     function closeProfile(event) {
       if (!profileRef.current?.contains(event.target)) setProfileOpen(false)
@@ -122,6 +138,15 @@ export default function Header() {
             {profileOpen && (
               <div className="profile-popover" role="dialog" aria-label="User profile">
                 <p className="profile-name">{user?.name || 'Account'}</p>
+                {user?.role === 'admin' && (
+                  <Link
+                    href="/manage"
+                    className="profile-manage"
+                    onClick={() => setProfileOpen(false)}
+                  >
+                    Manage
+                  </Link>
+                )}
                 <button type="button" className="profile-logout" onClick={handleLogout}>Logout</button>
               </div>
             )}
